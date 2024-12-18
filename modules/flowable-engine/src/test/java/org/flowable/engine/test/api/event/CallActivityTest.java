@@ -748,6 +748,47 @@ public class CallActivityTest extends PluggableFlowableTestCase {
         assertProcessEnded(processInstance.getId());
     }
 
+    @Test
+    @Deployment(resources = {
+            "org/flowable/engine/test/api/event/CallActivityTest.testCallActivityWithMultiInstanceBehaviorAndAsyncCompleteRetry.bpmn20.xml",
+            "org/flowable/engine/test/api/event/CallActivityTest.testCallActivityWithMultiInstanceBehaviorAndAsyncCompleteRetry_subflow.bpmn20.xml",
+    })
+    public void testCallActivityWithMultiInstanceBehaviorAndAsyncCompleteRetry() throws Exception {
+        testCallActivityWithMultiInstanceBehaviorRetryAfterFailure();
+    }
+    
+    @Test
+    @Deployment(resources = {
+            "org/flowable/engine/test/api/event/CallActivityTest.testCallActivityWithMultiInstanceBehaviorAndSyncCompleteRetry.bpmn20.xml",
+            "org/flowable/engine/test/api/event/CallActivityTest.testCallActivityWithMultiInstanceBehaviorAndAsyncCompleteRetry_subflow.bpmn20.xml",
+    })
+    public void testCallActivityWithMultiInstanceBehaviorAndSyncCompleteRetry() throws Exception {
+        testCallActivityWithMultiInstanceBehaviorRetryAfterFailure();
+    }
+    
+    public void testCallActivityWithMultiInstanceBehaviorRetryAfterFailure() throws Exception {
+        // Set number of retries to 1. In case of an error, the Job becomes a DeadLetterJob
+        processEngineConfiguration.getJobServiceConfiguration().setAsyncExecutorNumberOfRetries(1);
+
+        ProcessInstance processInstance = runtimeService.startProcessInstanceByKey("callActivity");
+
+        waitForJobExecutorToProcessAllJobsAndExecutableTimerJobs(20000L, 200L);
+
+        // Check erroneous state:
+        // The CallActivity is configured with VariableAggregation. However, it is intentionally referencing a non-existing variable. This will cause the CallActivity to fail.
+        assertThat(processEngine.getManagementService().createDeadLetterJobQuery().withException().count() == 3).isTrue();
+
+        // Set the missing process variable. After it is set, the process should complete successfully.
+        runtimeService.setVariable(processInstance.getId(), "nonExistingVariable", "target");
+
+        // Retry failed jobs
+        managementService.createDeadLetterJobQuery().list().forEach(job -> managementService.moveDeadLetterJobToExecutableJob(job.getId(), 3));
+        waitForJobExecutorToProcessAllJobsAndExecutableTimerJobs(20000L, 200L);
+        
+        // Check that the parent process and its subflows completed
+        assertProcessEnded(processInstance.getId());
+    }
+
     class CallActivityEventListener extends AbstractFlowableEngineEventListener {
 
         private List<FlowableEvent> eventsReceived;
