@@ -748,6 +748,24 @@ public class CallActivityTest extends PluggableFlowableTestCase {
         assertProcessEnded(processInstance.getId());
     }
 
+    @Test
+    @Deployment(resources = {
+            "org/flowable/engine/test/api/event/CallActivityTest.testCallActivityWithMultiInstanceBehaviorAndTerminateEndEvent_parent.bpmn20.xml",
+            "org/flowable/engine/test/api/event/CallActivityTest.testCallActivityWithMultiInstanceBehaviorAndTerminateEndEvent_subprocess.bpmn20.xml",
+    })
+    public void testCallActivityWithMultiInstanceBehaviorAndTerminateEndEvent() throws Exception {
+        ProcessInstance processInstance = runtimeService.startProcessInstanceByKey("callActivityWithTerminateEndEvent");
+        waitForJobExecutorToProcessAllJobsAndExecutableTimerJobs(20000L, 200L);
+
+        List<Task> tasks = processEngine.getTaskService().createTaskQuery().active().list();
+        assertThat(tasks.size() == 3).isTrue();
+        tasks.forEach(task -> processEngine.getTaskService().complete(task.getId()));
+        waitForJobExecutorToProcessAllJobsAndExecutableTimerJobs(20000L, 200L);
+        
+        // Check that the parent process and its subflows completed
+        assertProcessEnded(processInstance.getId());
+    }
+
     class CallActivityEventListener extends AbstractFlowableEngineEventListener {
 
         private List<FlowableEvent> eventsReceived;
